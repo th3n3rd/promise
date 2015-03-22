@@ -2,18 +2,9 @@
 
 namespace React\Promise;
 
-class Queue
+class Queue implements QueueInterface
 {
     private $queue = [];
-
-    public function enqueueHandlers(array $handlers, $value)
-    {
-        $this->enqueue(function () use ($handlers, $value) {
-            foreach ($handlers as $handler) {
-                $handler($value);
-            }
-        });
-    }
 
     public function enqueue(callable $task)
     {

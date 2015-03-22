@@ -24,6 +24,10 @@ class Promise implements ExtendedPromiseInterface, CancellablePromiseInterface
 
     public function then(callable $onFulfilled = null, callable $onRejected = null, callable $onProgress = null)
     {
+        if (null !== $this->result) {
+            return $this->result->then($onFulfilled, $onRejected, $onProgress);
+        }
+
         $canceller = null;
 
         if (null !== $this->canceller) {
@@ -101,16 +105,6 @@ class Promise implements ExtendedPromiseInterface, CancellablePromiseInterface
 
     private function resolver(callable $onFulfilled = null, callable $onRejected = null, callable $onProgress = null)
     {
-        if (null !== $this->result) {
-            return function ($resolve, $reject, $notify) use ($onFulfilled, $onRejected) {
-                $this->ensureQueue()->enqueue(function()  use ($onFulfilled, $onRejected, $resolve, $reject, $notify) {
-                    $this->result
-                        ->then($onFulfilled, $onRejected)
-                        ->done($resolve, $reject, $notify);
-                });
-            };
-        }
-
         return function ($resolve, $reject, $notify) use ($onFulfilled, $onRejected, $onProgress) {
             if ($onProgress) {
                 $progressHandler = function ($update) use ($notify, $onProgress) {
@@ -158,7 +152,13 @@ class Promise implements ExtendedPromiseInterface, CancellablePromiseInterface
             return;
         }
 
-        $this->ensureQueue()->enqueueHandlers($this->progressHandlers, $update);
+        $handlers = $this->progressHandlers;
+
+        $this->ensureQueue()->enqueue(function () use ($handlers, $update) {
+            foreach ($handlers as $handler) {
+                $handler($update);
+            }
+        });
     }
 
     private function settle(ExtendedPromiseInterface $result)
@@ -168,7 +168,11 @@ class Promise implements ExtendedPromiseInterface, CancellablePromiseInterface
         $this->progressHandlers = $this->handlers = [];
         $this->result = $result;
 
-        $this->ensureQueue()->enqueueHandlers($handlers, $result);
+        $this->ensureQueue()->enqueue(function () use ($handlers, $result) {
+            foreach ($handlers as $handler) {
+                $handler($result);
+            }
+        });
     }
 
     private function call(callable $callback)
